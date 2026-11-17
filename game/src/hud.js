@@ -14,7 +14,7 @@ export function createHud() {
     health: el('health-num'), healthBar: el('health-bar'),
     wave: el('wave-label'), enemies: el('enemies-left'), score: el('score-num'),
     ammoMag: el('ammo-mag'), ammoName: el('ammo-name'), feed: el('killfeed'),
-    cross: el('crosshair'), hit: el('hitmarker'),
+    cross: el('crosshair'), hit: el('hitmarker'), popups: el('popups'),
     banner: el('banner'), bannerTitle: el('banner-title'), bannerSub: el('banner-sub'),
     vignette: el('vignette'), hint: el('hint'),
     title: el('title-overlay'), startBtn: el('start-btn'),
@@ -58,6 +58,20 @@ export function showHitmarker(h, head) {
   h.hit.style.setProperty('--hm', head ? '#ff5a4d' : '#f0a830');
   clearTimeout(h._hitTimer);
   h._hitTimer = setTimeout(() => h.hit.classList.remove('on'), 110);
+}
+
+// A kill's points, floating up from the crosshair and fading: the score made
+// visible at the moment it is earned, not just in the corner readout.
+export function showScorePopup(h, gained, head) {
+  if (!h.popups) return;
+  const node = document.createElement('div');
+  node.className = head ? 'score-popup head' : 'score-popup';
+  node.textContent = `+${gained}`;
+  node.style.left = `${46 + Math.random() * 8}%`;
+  node.style.top = `${41 - h.popups.children.length * 5}%`; // rapid kills stack upward
+  h.popups.appendChild(node);
+  while (h.popups.children.length > 6) h.popups.removeChild(h.popups.firstChild);
+  setTimeout(() => node.remove(), 1600);
 }
 
 export function flashDamage(h) {

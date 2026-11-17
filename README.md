@@ -8,9 +8,9 @@
 
 Play it with **WASD + mouse** — click to fire, **1 / 2 / Q** to swap between the Dawnline rifle and the Gunblade, **V** for a melee slash, **R** to reload, and **Shift** to sprint. Every kill scores; headshots pay a bonus. Survive all six waves to win — if your HP hits zero, the yard falls and the run ends. Between waves the yard breathes for a few seconds, so reload, reposition, and watch the gates.
 
-- Six escalating waves of Jackal raiders with distinct runner, brute, and sniper behaviors
+- Six escalating waves, 60 raiders in all, across three enemy types: the standard Jackal, the fast and fragile Rusher that closes to point-blank, and the slow, towering Brute that soaks up fire
 - Two weapons with different rhythms: the Dawnline hitscan rifle and the Gunblade's slash-and-shot combo
-- Score chase with headshot bonuses, a kill feed, and win/lose results screens with restart
+- Score chase with headshot bonuses, floating score popups, a kill feed, and win/lose results screens with restart
 
 The game is plain static files under `game/` — Three.js is vendored, there is no build step, and it runs fully offline in a desktop browser. The entry program `main.ts` (Node, standard library only) hands it in: it copies `game/` and `screenshots/` to the output directory and writes `dossier.json` with the vendored `buildDossier` library.
 

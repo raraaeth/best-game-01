@@ -4,11 +4,11 @@
 // win or the loss — and every point of damage passes through here, so score,
 // feed, HUD and sounds can never disagree about what just happened.
 import { S, resetRun, addFeed } from './state.js';
-import { GATES, SCORE, TOTAL_WAVES, PLAYER_TUNING, waveSpec, MAX_BOTS_ALIVE } from './config.js';
+import { ARCHETYPES, GATES, SCORE, TOTAL_WAVES, PLAYER_TUNING, waveSpec, MAX_BOTS_ALIVE } from './config.js';
 import { spawnRaider, clearBots, aliveBots } from './bots.js';
 import { resetPlayer } from './player.js';
 import { WEAPONS } from './weapons.js';
-import { showBanner, showHitmarker, flashDamage, showEndScreen, hideEndScreen, setTitleVisible } from './hud.js';
+import { showBanner, showHitmarker, showScorePopup, flashDamage, showEndScreen, hideEndScreen, setTitleVisible } from './hud.js';
 
 const BREATHER_SECONDS = 3.5; // between one wave's last raider and the next wave
 
@@ -27,17 +27,39 @@ export function startRun(ctx) {
   startWave(ctx, 1);
 }
 
+// Expand a wave's composition into a shuffled spawn queue, so the archetypes
+// arrive interleaved through the gates instead of in blocks.
+function buildSpawnQueue(spec) {
+  const queue = [];
+  for (const [type, n] of Object.entries(spec.mix)) {
+    for (let i = 0; i < n; i++) queue.push(type);
+  }
+  for (let i = queue.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = queue[i]; queue[i] = queue[j]; queue[j] = t;
+  }
+  return queue;
+}
+
+// The wave's roster as a banner sub-line: "6 Jackals · 3 Rushers · 2 Brutes".
+function mixSummary(spec) {
+  return Object.entries(spec.mix)
+    .map(([type, n]) => `${n} ${ARCHETYPES[type].label}${n > 1 ? 's' : ''}`)
+    .join(' · ');
+}
+
 export function startWave(ctx, wave) {
   const spec = waveSpec(wave);
   S.wave = wave;
   S.spawnedThisWave = 0;
-  S.queuedThisWave = spec.count;
+  S.spawnQueue = buildSpawnQueue(spec);
+  S.queuedThisWave = S.spawnQueue.length;
   S.enemiesLeft = spec.count;
   S.spawnT = 0.4; // the first raider is through the gate almost at once
   S.phase = 'live';
   showBanner(ctx.hud,
-    wave === 1 ? 'WAVE 1 — THEY ARE COMING' : `WAVE ${wave}`,
-    wave === TOTAL_WAVES ? 'The last wave. Hold the yard.' : `${spec.count} raiders through the gates.`,
+    `WAVE ${wave} — ${spec.count} RAIDERS INBOUND`,
+    wave === TOTAL_WAVES ? 'The last wave. Hold the yard.' : mixSummary(spec),
     2600);
   ctx.audio.waveStart(wave);
 }
@@ -52,11 +74,12 @@ export function updateWaves(ctx, dt) {
       const alive = aliveBots(ctx.bots).length;
       if (S.spawnT <= 0 && alive < MAX_BOTS_ALIVE) {
         const gate = GATES[Math.floor(Math.random() * GATES.length)];
-        const bot = spawnRaider(ctx.bots, spec, gate, ctx.nameCursor);
+        const bot = spawnRaider(ctx.bots, spec, gate, ctx.nameCursor, S.spawnQueue[0]);
         if (bot) {
           ctx.nameCursor++;
+          S.spawnQueue.shift();
+          S.queuedThisWave = S.spawnQueue.length;
           S.spawnedThisWave++;
-          S.queuedThisWave--;
           S.spawnT = spec.spawnEvery;
         } else {
           S.spawnT = 0.3; // pool momentarily dry; try again shortly
@@ -127,6 +150,7 @@ export function damageBot(ctx, bot, dmg, head, attacker) {
     if (head) S.headshots++;
     const gained = SCORE.kill + (head ? SCORE.headshotBonus : 0);
     S.score += gained;
+    showScorePopup(ctx.hud, gained, head);
     addFeed(`You ▸ ${bot.name}${head ? ' (headshot)' : ''} +${gained}`);
     ctx.audio.kill();
   } else {
@@ -141,6 +165,7 @@ export function damagePlayer(ctx, dmg, attacker) {
   p.hp -= dmg;
   p.lastHurtT = S.time;
   S.health = Math.max(0, p.hp);
+  S.shake = Math.min(0.5, S.shake + 0.14 + dmg * 0.006); // the camera flinches with the vignette
   flashDamage(ctx.hud);
   ctx.audio.hurt();
   if (p.hp <= 0) {

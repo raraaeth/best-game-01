@@ -289,6 +289,16 @@ function step(dt) {
   eyePos(player, _tmp);
   camera.position.copy(_tmp);
   camera.rotation.set(player.pitch, player.yaw, S.phase === 'lost' ? 0.3 : 0, 'YXZ');
+  // Damage shake: a jitter on top of the eye while the envelope damagePlayer
+  // raised decays — the flinch that goes with the red vignette.
+  if (S.shake > 0.003) {
+    camera.position.x += (Math.random() - 0.5) * S.shake * 0.16;
+    camera.position.y += (Math.random() - 0.5) * S.shake * 0.13;
+    camera.rotation.z += (Math.random() - 0.5) * S.shake * 0.05;
+    S.shake = Math.max(0, S.shake - dt * 1.6);
+  } else {
+    S.shake = 0;
+  }
   kick = Math.max(0, kick - dt * 5);
   updateViewmodel(vm, S.time, player.moving, kick, Math.max(0, swingT));
   updateFx(fx, dt);

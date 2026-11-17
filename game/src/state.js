@@ -17,8 +17,10 @@ export const S = {
   enemiesLeft: 0, // raiders alive plus raiders still queued to spawn
   spawnedThisWave: 0,
   queuedThisWave: 0,
+  spawnQueue: [], // archetype ids still to come through the gates this wave
   spawnT: 0, // countdown to the next queued spawn
   clearT: 0, // countdown during the waveclear breather
+  shake: 0, // camera shake envelope, 0..~0.5; damage raises it, main decays it
   time: 0, // sim clock, seconds, fixed-step
   feed: [], // kill feed lines: { text, t }, newest last, capped at 5
   shot: null, // 'title' | 'play' | 'win' | 'lose' when ?shot= is present
@@ -37,8 +39,10 @@ export function resetRun() {
   S.enemiesLeft = 0;
   S.spawnedThisWave = 0;
   S.queuedThisWave = 0;
+  S.spawnQueue = [];
   S.spawnT = 0;
   S.clearT = 0;
+  S.shake = 0;
   S.feed.length = 0;
 }
 

@@ -5,10 +5,10 @@
 // seeded Math.random (swapped in by main.js) makes it the same frame on every
 // render. Nothing here draws or fakes anything the game does not do live.
 import { S } from './state.js';
-import { waveSpec, TOTAL_WAVES } from './config.js';
+import { GATES, waveSpec, TOTAL_WAVES } from './config.js';
 import { startRun, startWave } from './waves.js';
 import { setTitleVisible, showEndScreen } from './hud.js';
-import { aliveBots } from './bots.js';
+import { aliveBots, spawnRaider } from './bots.js';
 
 const STEP = 1 / 60;
 
@@ -26,24 +26,26 @@ function stageTitle(ctx) {
 }
 
 /**
- * The play scene: wave 3, mid-fight. The autopilot focus-fires the nearest
- * raider until one drops — a real kill, with its real feed line — and then the
- * frame is composed the way VEILPOINT's duel shot was: the nearest survivors
- * are re-staged into the Warden's line of sight and one fresh shot is fired,
- * so the frozen frame carries a tracer, a muzzle flash and a hitmarker from
+ * The play scene: wave 4, mid-fight — the first wave that fields all three
+ * archetypes at once. The autopilot focus-fires the nearest raider until one
+ * drops — a real kill, with its real feed line — and then the frame is
+ * composed densely: a Brute looming left of the lane, a Rusher closing on the
+ * right, a Jackal behind it, and one raider square ahead whose health is
+ * staged low so the final shot is a kill — the frozen frame carries a tracer,
+ * a muzzle flash, a hitmarker and the kill's floating score popup, all from
  * the game's own code.
  */
 function stagePlay(ctx) {
   startRun(ctx);
-  startWave(ctx, 3); // jump the run to wave 3's roster and stats
-  S.score = 1200;
-  S.kills = 9;
-  S.headshots = 3;
-  S.shotsFired = 38;
-  S.shotsHit = 27;
-  S.timePlayed = 96;
+  startWave(ctx, 4); // jump the run to wave 4's roster and stats
+  S.score = 2400;
+  S.kills = 17;
+  S.headshots = 5;
+  S.shotsFired = 71;
+  S.shotsHit = 49;
+  S.timePlayed = 168;
   ctx.player.pos.x = 0;
-  ctx.player.pos.z = 7;
+  ctx.player.pos.z = 5;
   simulate(ctx, 3); // the first raiders come through the gates and close in
   // Focus fire: bring one raider into the open lane ahead and engage it until
   // it drops. (Left to themselves the raiders take cover behind the yard's
@@ -62,27 +64,53 @@ function stagePlay(ctx) {
     simulate(ctx, 0.06);
   }
   ctx.input.firing = false;
-  // Compose the frozen frame: one raider square ahead in the open lane, a
-  // second off to the left, the Warden's rifle already up.
-  const first = nearestRaider(ctx);
-  const second = aliveBots(ctx.bots).find((b) => b !== first);
-  if (first) placeRaider(ctx, first, 1.5, -4);
-  if (second) placeRaider(ctx, second, -8, -1);
-  if (first) {
-    aimAt(ctx, first);
+  // Compose the frozen frame: one of each archetype in the Warden's view, and
+  // the kill target square ahead. A type still waiting in the spawn queue is
+  // brought through the north gate by the game's own spawn code, so what the
+  // frame shows is exactly what the wave fields.
+  const hero = nearestRaider(ctx);
+  const brute = ensureType(ctx, 'brute', hero);
+  const rusher = ensureType(ctx, 'rusher', hero);
+  const jackal = aliveBots(ctx.bots).find((b) => b.type === 'jackal' && b !== hero && b !== brute && b !== rusher)
+    || aliveBots(ctx.bots).find((b) => b !== hero && b !== brute && b !== rusher);
+  if (brute) placeRaider(ctx, brute, -3.4, -4.5);
+  if (rusher) placeRaider(ctx, rusher, 4.6, -1.4);
+  if (jackal) placeRaider(ctx, jackal, 6.8, -6);
+  if (hero) {
+    hero.hp = 20; // the composed shot finishes this one: popup, burst and all
+    placeRaider(ctx, hero, 1.0, -0.6);
+    aimAt(ctx, hero);
     ctx.scene.updateMatrixWorld(true); // the re-staged raiders must raycast where they stand
     ctx.loadout.reloading = false;
     ctx.loadout.cooldown = 0;
     if (ctx.loadout.mag < 18) ctx.loadout.mag = 18;
-    ctx.playerShoot(); // the tracer, flash and hitmarker in the frozen frame
+    ctx.step(STEP); // settle the camera on the final aim
+    ctx.playerShoot(); // the tracer, flash, hitmarker and score popup in the frozen frame
   }
-  ctx.step(STEP); // settle the camera on the final aim
   // Present the HUD as a fight in progress reads: some damage taken, some
   // ammunition spent, regeneration not yet kicked in.
   ctx.player.hp = 76;
   S.health = 76;
   ctx.player.lastHurtT = S.time;
   ctx.loadout.reloading = false;
+}
+
+/**
+ * A live raider of the wanted archetype, or null. If the wave has not sent
+ * one through the gates yet, the next of its kind in the spawn queue is
+ * activated at the north gate with the game's own spawn code (the queue and
+ * the HUD's raiders-left count stay honest: one fewer queued, one more alive).
+ */
+function ensureType(ctx, type, exclude) {
+  const alive = aliveBots(ctx.bots).find((b) => b.type === type && b !== exclude);
+  if (alive) return alive;
+  const qi = S.spawnQueue.indexOf(type);
+  if (qi === -1) return null;
+  S.spawnQueue.splice(qi, 1);
+  S.queuedThisWave = S.spawnQueue.length;
+  const bot = spawnRaider(ctx.bots, waveSpec(S.wave), GATES[0], ctx.nameCursor, type);
+  if (bot) ctx.nameCursor++;
+  return bot;
 }
 
 /** Move a live raider to a clear spot and sync its mesh, facing the Warden. */

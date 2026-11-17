@@ -1,13 +1,15 @@
 // VEILPOINT ARENA — bots.js: the Jackal raiders. A fixed pool of raider bodies is
 // created once and recycled across waves; the wave director activates them at
-// the gates with the wave's stats. A raider hunts the Warden: it paths through
-// the yard's waypoint graph until it has line of sight, closes to its preferred
-// range, then strafes and fires in bursts. Its aim is honest — the same hitscan
-// the player uses, with a wider cone — so cover genuinely protects you.
+// the gates with the wave's stats and an archetype — the standard Jackal, the
+// fast fragile Rusher, or the slow towering Brute. A raider hunts the Warden:
+// it paths through the yard's waypoint graph until it has line of sight, closes
+// to its preferred range, then strafes and fires in bursts. Its aim is honest —
+// the same hitscan the player uses, with a wider cone — so cover genuinely
+// protects you.
 import * as THREE from 'three';
 import { moveCircle, segmentBlocked, findPath } from './arena.js';
 import { shootHitscan } from './weapons.js';
-import { MAX_BOTS_ALIVE } from './config.js';
+import { ARCHETYPES, MAX_BOTS_ALIVE } from './config.js';
 
 export const BOT_POOL_SIZE = 15; // wave 6 fields 15 raiders in total
 const BOT_RADIUS = 0.38;
@@ -50,7 +52,8 @@ function sharedParts() {
 function makeRaiderMesh() {
   sharedParts();
   const group = new THREE.Group();
-  // The body material is per-raider so a hit can flash it without flashing all.
+  // The body material is per-raider so a hit can flash it without flashing all,
+  // and so each archetype can wear its own colour.
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8a4d1d, roughness: 0.8, emissive: 0x000000 });
   const body = new THREE.Mesh(_geoBody, bodyMat);
   body.position.y = 0.95;
@@ -74,7 +77,7 @@ export function createBots(scene) {
     const { group, head, body, bodyMat } = makeRaiderMesh();
     scene.add(group);
     const bot = {
-      id: i, kind: 'bot', name: RAIDER_NAMES[i % RAIDER_NAMES.length],
+      id: i, kind: 'bot', type: 'jackal', name: RAIDER_NAMES[i % RAIDER_NAMES.length],
       active: false, alive: false,
       pos: { x: 0, z: 0 }, yaw: 0,
       hp: 1, maxHp: 1, speed: 3, damage: 6, prefRange: 14,
@@ -90,21 +93,26 @@ export function createBots(scene) {
   return bots;
 }
 
-/** Activate a pooled raider at a gate with the wave's stats. Null if pool dry. */
-export function spawnRaider(bots, spec, gate, nameIndex) {
+/**
+ * Activate a pooled raider at a gate with the wave's stats scaled by its
+ * archetype. Null if the pool is dry.
+ */
+export function spawnRaider(bots, spec, gate, nameIndex, typeId) {
   const bot = bots.find((b) => !b.active);
   if (!bot) return null;
+  const arch = ARCHETYPES[typeId] || ARCHETYPES.jackal;
+  bot.type = typeId || 'jackal';
   bot.active = true;
   bot.alive = true;
   bot.name = RAIDER_NAMES[nameIndex % RAIDER_NAMES.length];
   bot.pos.x = gate.x + (Math.random() - 0.5) * 3;
   bot.pos.z = gate.z + (Math.random() - 0.5) * 3;
   bot.yaw = Math.atan2(-(0 - bot.pos.x), -(0 - bot.pos.z));
-  bot.hp = spec.hp;
-  bot.maxHp = spec.hp;
-  bot.speed = spec.speed * (0.92 + Math.random() * 0.16);
-  bot.damage = spec.damage;
-  bot.prefRange = spec.range + (Math.random() * 4 - 2);
+  bot.hp = Math.round(spec.hp * arch.hpMul);
+  bot.maxHp = bot.hp;
+  bot.speed = spec.speed * arch.speedMul * (0.92 + Math.random() * 0.16);
+  bot.damage = Math.max(1, Math.round(spec.damage * arch.dmgMul));
+  bot.prefRange = spec.range * arch.rangeMul + (Math.random() * 4 - 2);
   bot.path = [];
   bot.pathI = 0;
   bot.repathT = Math.random() * 0.3;
@@ -116,6 +124,9 @@ export function spawnRaider(bots, spec, gate, nameIndex) {
   bot.strafeDir = Math.random() < 0.5 ? -1 : 1;
   bot.flashT = 0;
   bot.deadT = 0;
+  bot.bodyMat.color.setHex(arch.color);
+  bot.bodyMat.emissive.setRGB(0, 0, 0);
+  bot.mesh.scale.setScalar(arch.scale);
   bot.mesh.visible = true;
   bot.mesh.rotation.set(0, bot.yaw, 0);
   bot.mesh.position.set(bot.pos.x, 0, bot.pos.z);
