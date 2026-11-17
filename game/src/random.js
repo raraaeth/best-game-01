@@ -1,0 +1,20 @@
+// VEILPOINT ARENA — random.js: a tiny seeded generator (mulberry32). Screenshot
+// mode swaps Math.random for one of these so a staged frame is the same frame
+// every time it is rendered; live play keeps the browser's own Math.random.
+
+export function mulberry32(initialSeed) {
+  let a = initialSeed | 0;
+  return function nextRandom() {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Replace Math.random with a seeded generator; returns the previous one. */
+export function seedMathRandom(seed) {
+  const previous = Math.random;
+  Math.random = mulberry32(seed);
+  return previous;
+}

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VEILPOINT ARENA — a three.js wave-defense FPS</title>
+<style>
+  :root {
+    --canvas: #1c1a26; --surface: #232028; --hairline: #3a3340; --ink: #ece7db;
+    --muted: #9a93a3; --accent: #e07b2e; --teal: #39c2c9; --danger: #d23b2e;
+    --radius: 6px; --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-readout: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--canvas); color: var(--ink); font-family: var(--font-ui); }
+  #game, #game canvas { position: fixed; inset: 0; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%); transition: opacity 200ms linear; }
+  #crosshair i { position: absolute; background: var(--ink); opacity: .9; }
+  #crosshair i:nth-child(1) { left: 10px; top: 0; width: 2px; height: 7px; }
+  #crosshair i:nth-child(2) { left: 10px; bottom: 0; width: 2px; height: 7px; }
+  #crosshair i:nth-child(3) { top: 10px; left: 0; height: 2px; width: 7px; }
+  #crosshair i:nth-child(4) { top: 10px; right: 0; height: 2px; width: 7px; }
+  #hitmarker { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; transition: opacity 90ms linear; }
+  #hitmarker.on { opacity: 1; }
+  #hitmarker i { position: absolute; background: var(--hm, #f0a830); }
+  #hitmarker i:nth-child(1) { left: 12px; top: 0; width: 2px; height: 8px; }
+  #hitmarker i:nth-child(2) { left: 12px; bottom: 0; width: 2px; height: 8px; }
+  #hitmarker i:nth-child(3) { top: 12px; left: 0; height: 2px; width: 8px; }
+  #hitmarker i:nth-child(4) { top: 12px; right: 0; height: 2px; width: 8px; }
+
+  #wave-label { position: fixed; top: 18px; left: 24px; font-family: var(--font-readout); font-size: 14px; letter-spacing: .14em; color: var(--ink); }
+  #enemies-left { position: fixed; top: 40px; left: 24px; font-family: var(--font-readout); font-size: 13px; letter-spacing: .08em; color: var(--accent); }
+  #score-num { position: fixed; top: 18px; right: 24px; font-family: var(--font-readout); font-size: 16px; font-weight: 700; letter-spacing: .06em; color: var(--ink); }
+  #killfeed { position: fixed; top: 48px; right: 24px; text-align: right; font-family: var(--font-readout); font-size: 13px; line-height: 1.7; color: var(--muted); white-space: pre-line; }
+
+  #health { position: fixed; left: 32px; bottom: 28px; width: 210px; }
+  #health .label { display: flex; justify-content: space-between; font-family: var(--font-readout); font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  #health .track { height: 8px; background: #00000055; border: 1px solid var(--hairline); border-radius: 4px; overflow: hidden; }
+  #health-bar { height: 100%; width: 100%; background: var(--teal); transition: width 120ms linear; }
+  #ammo { position: fixed; right: 32px; bottom: 24px; text-align: right; }
+  #ammo-mag { font-family: var(--font-readout); font-size: 52px; line-height: 1; color: var(--ink); }
+  #ammo-name { font-family: var(--font-readout); font-size: 13px; color: var(--muted); margin-top: 4px; letter-spacing: .06em; }
+  #hint { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); font-family: var(--font-readout); font-size: 12px; letter-spacing: .08em; color: var(--muted); transition: opacity 200ms linear; }
+
+  #banner { position: fixed; top: 26%; left: 50%; transform: translateX(-50%); text-align: center; }
+  #banner-title { font-size: 34px; font-weight: 700; letter-spacing: .06em; text-shadow: 0 2px 18px #000; }
+  #banner-sub { margin-top: 6px; font-size: 15px; color: var(--muted); text-shadow: 0 1px 8px #000; }
+  #banner[hidden], .overlay[hidden], #paused-note[hidden] { display: none; }
+
+  #vignette { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 120ms linear; background: radial-gradient(circle at 50% 50%, transparent 55%, rgba(210, 59, 46, .45) 100%); }
+  #vignette.on { opacity: 1; }
+
+  #paused-note { position: fixed; top: 58%; left: 50%; transform: translateX(-50%); font-family: var(--font-readout); font-size: 14px; letter-spacing: .1em; color: var(--ink); background: #00000088; border: 1px solid var(--hairline); border-radius: var(--radius); padding: 10px 16px; }
+
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--canvas) 78%, transparent); }
+  .panel { width: min(480px, 100%); padding: 32px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); }
+  .panel h1 { margin: 0 0 8px; font-size: 36px; letter-spacing: -.01em; }
+  .panel h1 span { color: var(--accent); }
+  .panel p { margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: var(--muted); }
+  .big-btn { font: inherit; font-weight: 600; padding: 12px 18px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: var(--canvas); cursor: pointer; pointer-events: auto; }
+  .big-btn:hover { background: var(--ink); border-color: var(--ink); }
+  .keys { margin: 22px 0 0; padding: 0; list-style: none; display: grid; gap: 7px; font-size: 13px; color: var(--muted); }
+  .keys kbd { min-width: 24px; padding: 2px 6px; border: 1px solid var(--hairline); border-radius: 4px; font-family: var(--font-readout); font-size: 12px; color: var(--ink); text-align: center; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; margin: 0 0 24px; }
+  .stat { display: flex; justify-content: space-between; border-top: 1px solid var(--hairline); padding-top: 8px; }
+  .stat-k { font-family: var(--font-readout); font-size: 12px; letter-spacing: .08em; color: var(--muted); }
+  .stat-v { font-family: var(--font-readout); font-size: 15px; font-weight: 700; color: var(--ink); }
+  #debug { position: fixed; left: 4px; bottom: 4px; font: 10px monospace; color: #ffffff22; white-space: pre; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud" aria-hidden="true">
+  <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+  <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+  <div id="wave-label">STANDBY</div>
+  <div id="enemies-left">0 RAIDERS LEFT</div>
+  <div id="score-num">SCORE 0</div>
+  <div id="killfeed"></div>
+  <div id="health"><div class="label"><span>HEALTH</span><span id="health-num">100</span></div><div class="track"><div id="health-bar"></div></div></div>
+  <div id="ammo"><div id="ammo-mag">30</div><div id="ammo-name">Dawnline · ∞ RESERVE</div></div>
+  <div id="hint">1 / 2 WEAPONS · V MELEE · R RELOAD · SHIFT SPRINT</div>
+  <div id="banner" hidden><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="vignette"></div>
+  <div id="paused-note" hidden>PAUSED — CLICK TO KEEP FIGHTING</div>
+</div>
+
+<div id="title-overlay" class="overlay">
+  <section class="panel" role="dialog" aria-modal="true" aria-labelledby="title-heading">
+    <h1 id="title-heading">VEILPOINT <span>ARENA</span></h1>
+    <p>Six waves of Jackal raiders are coming through the gates of the Duskworks yard, and one Warden holds it alone. Drop them all — headshots pay bonus, and the yard is yours if you are still standing after wave 6.</p>
+    <button id="start-btn" class="big-btn" type="button">Defend the arena</button>
+    <ul class="keys">
+      <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move · <kbd>Mouse</kbd> Look · <kbd>Click</kbd> Fire</li>
+      <li><kbd>1</kbd> Dawnline rifle · <kbd>2</kbd> Gunblade · <kbd>Q</kbd> Swap weapon</li>
+      <li><kbd>V</kbd> Melee slash · <kbd>R</kbd> Reload · <kbd>Shift</kbd> Sprint</li>
+      <li>Health creeps back after 4 quiet seconds — use the crates.</li>
+    </ul>
+  </section>
+</div>
+
+<div id="end-overlay" class="overlay" hidden>
+  <section class="panel" role="dialog" aria-modal="true" aria-labelledby="end-title">
+    <h1 id="end-title">ARENA <span>HELD</span></h1>
+    <p id="end-sub"></p>
+    <div id="end-stats" class="stats"></div>
+    <button id="restart-btn" class="big-btn" type="button">Fight again</button>
+  </section>
+</div>
+
+<div id="debug"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js"
+  }
+}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
